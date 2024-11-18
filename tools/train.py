@@ -8,8 +8,8 @@ import argparse
 import os
 import sys
 import torch
-
 from torch.backends import cudnn
+import logging
 
 sys.path.append('.')
 from config import cfg
@@ -23,11 +23,38 @@ from utils.logger import setup_logger
 
 
 def train(cfg):
-    # prepare dataset
+    # prepare dataset  
     train_loader, val_loader, num_query, num_classes = make_data_loader(cfg)
 
     # prepare model
     model = build_model(cfg, num_classes)
+    
+    # # 打印模型结构和参数数量
+    # logger = logging.getLogger("reid_baseline.train")
+    # logger.info("Model structure:")
+    # logger.info(model)
+    
+    # # 计算总参数量和可训练参数量
+    # total_params = sum(p.numel() for p in model.parameters())
+    # trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    
+    # logger.info(f"Total parameters: {total_params:,}")
+    # logger.info(f"Trainable parameters: {trainable_params:,}")
+    
+    # # 打印每层参数情况
+    # logger.info("\nParameters by layer:")
+    # for name, param in model.named_parameters():
+    #     if param.requires_grad:
+    #         logger.info(f"{name}: {param.numel():,} parameters")
+            
+    # # 如果使用qReLU,打印qReLU参数
+    # qrelu_params = sum(p.numel() for n, p in model.named_parameters() if 'qrelu' in n.lower())
+    # if qrelu_params > 0:
+    #     logger.info(f"\nTotal qReLU parameters: {qrelu_params:,}")
+    #     logger.info("\nqReLU parameters:")
+    #     for name, param in model.named_parameters():
+    #         if 'qrelu' in name.lower():
+    #             logger.info(f"{name}: {param.data.item():.4f}")
 
     if cfg.MODEL.IF_WITH_CENTER == 'no':
         print('Train without center loss, the loss type is', cfg.MODEL.METRIC_LOSS_TYPE)
