@@ -6,10 +6,11 @@
 
 import torch
 from torch import nn
-
+from config import cfg
 from .backbones.resnet import ResNet, BasicBlock, Bottleneck
 from .backbones.senet import SENet, SEResNetBottleneck, SEBottleneck, SEResNeXtBottleneck
 from .backbones.resnet_ibn_a import resnet50_ibn_a
+from .backbones.resnet_qrelu import *
 
 
 def weights_init_kaiming(m):
@@ -34,12 +35,23 @@ def weights_init_classifier(m):
         if m.bias:
             nn.init.constant_(m.bias, 0.0)
 
+# class ExpandTemporalDim(nn.Module):
+#     def __init__(self, T):
+#         super().__init__()
+#         self.T = T
+
+#     def forward(self, x_seq: torch.Tensor):
+#         # print('----------------expandself.T:',self.T)
+#         y_shape = [self.T, int(x_seq.shape[0]/self.T)]
+#         y_shape.extend(x_seq.shape[1:])
+#         return x_seq.view(y_shape)
 
 class Baseline(nn.Module):
     in_planes = 2048
 
     def __init__(self, num_classes, last_stride, model_path, neck, neck_feat, model_name, pretrain_choice):
         super(Baseline, self).__init__()
+
         if model_name == 'resnet18':
             self.in_planes = 512
             self.base = ResNet(last_stride=last_stride, 
@@ -62,6 +74,30 @@ class Baseline(nn.Module):
             self.base = ResNet(last_stride=last_stride, 
                                block=Bottleneck,
                                layers=[3, 8, 36, 3])
+        # 添加qrelu
+        elif model_name == 'resnet18_qrelu':
+            self.in_planes = 512
+            self.base = ResNet_qReLU(last_stride=last_stride, 
+                               block=BasicBlock, 
+                               layers=[2, 2, 2, 2],T=cfg.MODEL.T)
+        elif model_name == 'resnet34_qrelu':
+            self.in_planes = 512
+            self.base = ResNet_qReLU(last_stride=last_stride,
+                               block=BasicBlock,
+                               layers=[3, 4, 6, 3],T=cfg.MODEL.T)
+        elif model_name == 'resnet50_qrelu':
+            self.base = ResNet_qReLU(last_stride=last_stride,
+                               block=Bottleneck,
+                               layers=[3, 4, 6, 3],T=cfg.MODEL.T)
+            print("--------------current_T--------------",cfg.MODEL.T)
+        elif model_name == 'resnet101_qrelu':
+            self.base = ResNet_qReLU(last_stride=last_stride,
+                               block=Bottleneck, 
+                               layers=[3, 4, 23, 3],T=cfg.MODEL.T)
+        elif model_name == 'resnet152_qrelu':
+            self.base = ResNet_qReLU(last_stride=last_stride, 
+                               block=Bottleneck,
+                               layers=[3, 8, 36, 3],T=cfg.MODEL.T)
             
         elif model_name == 'se_resnet50':
             self.base = SENet(block=SEResNetBottleneck, 
@@ -106,7 +142,7 @@ class Baseline(nn.Module):
                               input_3x3=False,
                               downsample_kernel_size=1, 
                               downsample_padding=0,
-                              last_stride=last_stride) 
+                              last_stride=last_stride)
         elif model_name == 'se_resnext101':
             self.base = SENet(block=SEResNeXtBottleneck,
                               layers=[3, 4, 23, 3], 
@@ -158,7 +194,18 @@ class Baseline(nn.Module):
         if self.neck == 'no':
             feat = global_feat
         elif self.neck == 'bnneck':
+
             feat = self.bottleneck(global_feat)  # normalize for angular softmax
+            # print(feat.shape)
+
+            # 测试时用
+            # if cfg.MODEL.T > 0:
+            #     expand = ExpandTemporalDim(T=cfg.MODEL.T)
+            #     feat = expand(feat)
+            #     feat = feat.mean(0)
+            #     print(feat.shape)
+                
+                # print('---------------------------running bottleneck---------------------------')
 
         if self.training:
             cls_score = self.classifier(feat)
@@ -171,9 +218,33 @@ class Baseline(nn.Module):
                 # print("Test with feature before BN")
                 return global_feat
 
+    # def load_param(self, trained_path):
+    #     param_dict = torch.load(trained_path)
+    #     print(type(param_dict))
+    #     for i in param_dict:
+    #         if 'classifier' in i:
+    #             continue
+    #         self.state_dict()[i].copy_(param_dict[i])
+
     def load_param(self, trained_path):
-        param_dict = torch.load(trained_path)
-        for i in param_dict:
-            if 'classifier' in i:
-                continue
-            self.state_dict()[i].copy_(param_dict[i])
+        try:
+            param_dict = torch.load(trained_path)
+            if isinstance(param_dict, dict):
+                # 如果是字典格式的state_dict
+                for i in param_dict:
+                    if 'classifier' in i:
+                        continue
+                    self.state_dict()[i].copy_(param_dict[i])
+            elif isinstance(param_dict, nn.Module):
+                # 如果保存的是整个模型
+                param_dict = param_dict.state_dict()
+                for i in param_dict:
+                    if 'classifier' in i:
+                        continue
+                    self.state_dict()[i].copy_(param_dict[i])
+            else:
+                raise TypeError(f"不支持的参数类型: {type(param_dict)}")
+                
+        except Exception as e:
+            print(f"加载模型参数时发生错误: {str(e)}")
+            raise
