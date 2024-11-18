@@ -1,0 +1,11 @@
+使用resnet50在market1501数据集上训练：
+python3 tools/train.py --config_file='configs/softmax_triplet.yml' MODEL.DEVICE_ID "('0,1,2,3')" DATASETS.NAMES "('market1501')" OUTPUT_DIR "('market1501_resnet50')"  
+
+使用qrelu在market1501数据集上训练：
+python3 tools/train.py --config_file='configs/softmax_triplet.yml' MODEL.DEVICE_ID "('0,1,2,3')" DATASETS.NAMES "('market1501')" OUTPUT_DIR "('market1501_resnet_qrelu_t16')"
+
+测试resnet_qrelu在market1501数据集上的效果
+
+Euclidean distance using feature before BN without re-ranking：
+python3 tools/test.py --config_file='configs/softmax_triplet_with_center.yml' MODEL.DEVICE_ID "('0,1,2,3')" DATASETS.NAMES "('market1501')" TEST.NECK_FEAT "('before')" TEST.FEAT_NORM "('no')" MODEL.PRETRAIN_CHOICE "('self')" TEST.WEIGHT "('./market1501_resnet_qrelu_t32/resnet50_qrelu_model_120.pth')" MODEL.T "(16)"
+python3 tools/test.py --config_file='configs/softmax_triplet_with_center.yml' MODEL.DEVICE_ID "('0,1,2,3')" DATASETS.NAMES "('market1501')" TEST.NECK_FEAT "('after')" TEST.FEAT_NORM "('yes')" MODEL.PRETRAIN_CHOICE "('self')" TEST.WEIGHT "('./market1501_resnet_qrelu_t32_avg/resnet50_qrelu_model_120.pth')" MODEL.T "(16)"
